@@ -51,8 +51,8 @@ function is_installed { # I/ $1: program name
 
 function bot_help {
   echo_info "Valid commands:"
-  echo_info " +                     : Increase the music volume by 2%"
-  echo_info " -                     : Decrease the music volume by 2%"
+  echo_info " +                     : Increase the music volume by 2%. Specify a number to increase it by that number times 2%."
+  echo_info " -                     : Decrease the music volume by 2%. Specify a number to decrease it by that number times 2%."
   echo_info " c|current             : Show the ID/name of the current song, if it is a playlist song and not an user-played temporary music"
   echo_info " a|add <YouTube URL>   : Download/add a YouTube video audio track to the music playlist"
   echo_info " p|play <YouTube URL>  : Queue the YouTube video audio track to be played after the current song, without adding it to the playlist"
@@ -149,25 +149,25 @@ function bot_rm { # $1: Music ID from the ls command (= YouTube video ID)
   fi
 }
 
-function bot_increase_volume {
+function bot_handle_volume { # $1: sign of volume change, $2 number of volume step
   if ! check_if_bot_started ; then
     echo_warning "Music bot is not started!"
   else
-    # We need to get the sink number given by PulseAudio to our process, so we list all the sink numbers and extract the one matching the PID of mplayer
-    sink_number=$(PULSE_SERVER="$BOT_PULSE_SERVER" pactl list sink-inputs | grep -B25 "application.process.id = \"`cat "$BOT_TEMP_FILES_LOCATION/music_bot_mplayer_pid"`\"" | grep "Sink Input" | cut -d"#" -f2)
-    # And then we increase its volume by 2%!
-    PULSE_SERVER="$BOT_PULSE_SERVER" pactl -- set-sink-input-volume $sink_number "+2%"
-  fi
-}
-
-function bot_decrease_volume {
-  if ! check_if_bot_started ; then
-    echo_warning "Music bot is not started!"
-  else
-    # We need to get the sink number given by PulseAudio to our process, so we list all the sink numbers and extract the one matching the PID of mplayer
-    sink_number=$(PULSE_SERVER="$BOT_PULSE_SERVER" pactl list sink-inputs | grep -B25 "application.process.id = \"`cat "$BOT_TEMP_FILES_LOCATION/music_bot_mplayer_pid"`\"" | grep "Sink Input" | cut -d"#" -f2)
-    # And then we decrease its volume by 2%!
-    PULSE_SERVER="$BOT_PULSE_SERVER" pactl -- set-sink-input-volume $sink_number "-2%"
+    if [[ "$2" == "" ]] ; then
+      # We need to get the sink number given by PulseAudio to our process, so we list all the sink numbers and extract the one matching the PID of mplayer
+      sink_number=$(PULSE_SERVER="$BOT_PULSE_SERVER" pactl list sink-inputs | grep -B25 "application.process.id = \"`cat "$BOT_TEMP_FILES_LOCATION/music_bot_mplayer_pid"`\"" | grep "Sink Input" | cut -d"#" -f2)
+      volume_step="${1}2%"
+      echo_debug "Changing volume by $volume_step"
+      PULSE_SERVER="$BOT_PULSE_SERVER" pactl -- set-sink-input-volume $sink_number "$volume_step"
+    elif [[ "$2" > 0 ]] && [[ "$2" < 51 ]] ; then
+      # We need to get the sink number given by PulseAudio to our process, so we list all the sink numbers and extract the one matching the PID of mplayer
+      sink_number=$(PULSE_SERVER="$BOT_PULSE_SERVER" pactl list sink-inputs | grep -B25 "application.process.id = \"`cat "$BOT_TEMP_FILES_LOCATION/music_bot_mplayer_pid"`\"" | grep "Sink Input" | cut -d"#" -f2)
+      volume_step="${1}$((${2}*2))%"
+      echo_debug "Changing volume by $volume_step"
+      PULSE_SERVER="$BOT_PULSE_SERVER" pactl -- set-sink-input-volume $sink_number "$volume_step"
+    else
+      echo_error "Volume argument is not a number between 1 and 50!"
+    fi
   fi
 }
 
@@ -189,11 +189,8 @@ function handle_user_input { # I/ $1: command, $2: arg
     case "$1" in
       "")
       ;;
-      +)
-        bot_increase_volume
-      ;;
-      -)
-        bot_decrease_volume
+      +|-)
+        bot_handle_volume "$1" "$2"
       ;;
       current|c)
         bot_list_current
